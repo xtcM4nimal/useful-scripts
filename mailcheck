@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# Purpose : All in one mail script for information gathering and diagnostics
+
+###################################
+# Defining colours and definitions
+###################################
+
+colred=$(tput setaf 1)    #Red
+colgrn=$(tput setaf 2)    #Green
+colyel=$(tput setaf 3)    #Yellow
+colblu=$(tput setaf 4)    #Blue
+colmag=$(tput setaf 5)    #Magenta
+colcya=$(tput setaf 6)    #Cyan
+reset=$(tput sgr0)	  #Reset
+
+PWDDIR='/var/log/'
+PWDDIRTMP='/root'
+SLASH='====================================================================================='
+octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+IP4="^$octet\\.$octet\\.$octet\\.$octet$"
+
+##############################
+# Defining Functions
+##############################
+
+function smtpconn {
+
+NUM=$(grep "SMTP connection outbound" $PWDDIR/exim_mainlog | grep $argument | awk '{print$1}' | wc -l)
+DAYS=$(grep "SMTP connection outbound" $PWDDIR/exim_mainlog | grep $argument | awk '{print$1}' | sort | uniq)
+
+echo "${colgrn}$SLASH${reset}
+The domain ${colred}$argument${reset} has had ${colred}$NUM${reset} SMTP connections
+to this server on the following days
+${colgrn}$SLASH${reset}
+${colyel}$DAYS${reset}
+${colgrn}$SLASH${reset}"
+
+}
+
+function ec {
+echo "This seems to have worked"
+echo $argument
+}
+
+function doveuser {
+
+DOVE1=$(grep "A=dovecot_login" $PWDDIR/exim_mainlog | sed -e 's#H=.* \[##' -e 's#\]:[0-9]*##' | awk '"$6 =~ $IP4" {print $5,$6}' | sort | uniq | grep $argument | sort )
+DOVE=$(grep "A=dovecot_login" $PWDDIR/exim_mainlog | sed -e 's#H=.* \[##' -e 's#\]:[0-9]*##' | grep $argument | awk '{print $5}'| sort | uniq)
+DOVE2=$(grep "A=dovecot_login" $PWDDIR/exim_mainlog | sed -e 's#H=.* \[##' -e 's#\]:[0-9]*##' | awk '{print $6}' | sort | uniq | grep $argument | sort )
+
+echo -e "${colgrn}$SLASH${reset}
+These are the current DoveCot login users for ${colred}$argument${reset}
+${colgrn}$SLASH${reset}
+$DOVE
+${colgrn}$SLASH${reset}"
+echo -e "These are the ${colred}UNIQUE IPs${reset} Dovecot authenticated per User for ${colred}$argument${reset}
+${colgrn}$SLASH${reset}
+$DOVE1
+${colgrn}$SLASH${reset}"
+
+}
+
+function disk {
+
+USER=$(grep $argument /etc/trueuserdomains | awk '{print$2}')
+USAGE=$(du -sh /home/$USER/mail/$argument/* | awk -F"/" '{print$1,$6}')
+
+echo -e "${colgrn}$SLASH${reset}
+Disk Usage of all mailboxes for ${colred}$argument${reset}
+${colgrn}$SLASH${reset}
+$USAGE
+${colgrn}$SLASH${reset}"
+
+}
+
+
+
+####################
+# Check arguments
+####################
+
+while getopts ":a:b:c:d:i:r:p:s" opt; do
+  case $opt in
+a)
+      # Check SMTP connections for domain
+      argument="$OPTARG"
+      smtpconn
+      ;;
+
+b)
+      # Checks Unique Dovecot login users
+      argument="$OPTARG"
+      doveuser
+      ;;
+
+d)
+	# Checks the size of all mailboxes for the domain as an argument.
+	argument="$OPTARG"
+	disk
+	;;
+
+\?)
+      echo "Invalid option: -$OPTARG" >&2
+      ;;
+
+:)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
