@@ -1,0 +1,2 @@
+*/15 * * * *  /root/dns_logs/start_capture.sh > /tmp/cronlog 2>&1
+*/15 * * * *  /root/dns_logs/process.sh
