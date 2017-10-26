@@ -11,4 +11,13 @@ for line in steam_ids_fd:
   steam_ids.append(line.strip())
 steam_ids_fd.close()
 
-print steam_ids
+# Uses the Steam IDs to retrieve friendly titles
+steam_title={}
+for i in steam_ids:
+  curl_fd = os.popen('''
+		curl -v --silent https://steamdb.info/app/%s/ --stderr -  | grep name | grep "td itemprop" | awk -F">" '{print$2}' | awk -F"<" '{print$1}';
+	''' % ( i ), 'r' )
+  for line in curl_fd:
+    steam_title[i] = line.strip()
+
+print steam_title
