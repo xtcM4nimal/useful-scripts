@@ -74,7 +74,72 @@ ${colgrn}$SLASH${reset}"
 
 }
 
+function proto {
 
+USERS=$(awk '/-login: Login:/ {print$6,$7,$8}' $PWDDIR/maillog | grep $argument | awk -F"=" '{print$2}' | sed 's/[<>,]//g' | sort | uniq | sed '/cpanel/d')
+LOGINS=$(awk '/-login: Login:/ {print$6,$8}' $PWDDIR/maillog | grep $argument | sort | uniq)
+LOGINS2=$(echo $LOGINS | grep -c login)
+PROT=$(echo $LOGINS | awk -F":" '{print$1}')
+POP=$(echo $LOGINS | grep -c "pop3")
+IMAP=$(echo $LOGINS | grep -c "imap")
+PIP=$(grep "pop3-login: Login:" $PWDDIR/maillog | grep $argument | awk -F"=" '{print$4}' | awk -F"," '{print$1}' | sort | uniq)
+USER=$argument
+
+if [ "$POP" = 1 ] && [ "$IMAP" = 1 ]
+then
+echo "$USER use BOTH POP3 and IMAP Protocols"
+elif  [ "$POP" = 1 ] && [ "$IMAP" = 0 ]
+then
+echo -e "${colgrn}$SLASH${reset}
+${colred}$USER uses POP3 Protocol Only from the following IPs:${reset}
+$PIP
+${colgrn}$SLASH${reset}"
+else
+echo "
+${colgrn}$SLASH${reset}
+${colred}$USER uses IMAP Protocol Only${reset}
+${colgrn}$SLASH${reset}"
+fi
+
+}
+
+function cwd {
+
+DIRS=$(grep cwd $PWDDIR/exim_mainlog | grep -v /var/spool | awk -F"cwd=" '{print $2}' | awk '{print $1}' | sort | uniq -c | sort -n | tail -n 7 | sed '6d' | sed '6d')
+
+echo "${colgrn}$SLASH${reset}
+The following directories are responsible for highest executed mail on the server
+${colgrn}$SLASH${reset}
+$DIRS
+${colgrn}$SLASH${reset}
+${colred}If you are concerned about spam on this server you should investigate these further.${reset}
+${colgrn}$SLASH${reset}"
+
+}
+
+function receive {
+IDS=$(grep $argument $PWDDIR/exim_mainlog | grep "=>" | awk '{print$3}' | sort | uniq)
+echo ${colgrn}$SLASH${reset}
+echo "Below are the UNIQUE email address sending mail to ${colred}$argument${reset}"
+echo ${colgrn}$SLASH${reset}
+for i in $IDS; do grep $i $PWDDIR/exim_mainlog | grep "<=" | awk '{print$5}' | grep "@";done | sort | uniq
+echo ${colgrn}$SLASH${reset}
+}
+
+function send {
+TMPARG=$(echo $argument)
+
+echo ${colgrn}$SLASH${reset}
+    read -p "Would you like to check outbound connections for a specific destination? [y/N]: " choiceone
+    if [ $choiceone = "y" ]; then
+  echo "Please enter the destination email address"
+  read destination
+  grep "SMTP connection outbound" $PWDDIR/exim_mainlog | grep $TMPARG | grep $destination
+else
+  grep "SMTP connection outbound" $PWDDIR/exim_mainlog | grep $TMPARG
+fi
+  echo ${colgrn}$SLASH${reset}
+}
 
 ####################
 # Check arguments
@@ -94,11 +159,35 @@ b)
       doveuser
       ;;
 
+c)
+  # Checks users using both imap and pop3 or only 1 of them
+  argument="$OPTARG"
+  proto
+  ;;
+
 d)
-	# Checks the size of all mailboxes for the domain as an argument.
-	argument="$OPTARG"
-	disk
-	;;
+  # Checks the size of all mailboxes for the domain as an argument.
+  argument="$OPTARG"
+  disk
+  ;;
+
+r)
+  # Checks all unique email addresses successfully delivering mail to specific mailbox.
+  argument="$OPTARG"
+  receive
+  ;;
+
+p)
+  # Checks all SMTP connections for domain - destination email address optional.
+  argument="$OPTARG"
+  send
+  ;;
+
+s)
+  # Checks the top 5 CWDs for invoked sendmail excluding root. No argument needed.
+        argument="$OPTARG"
+        cwd
+        ;;
 
 \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -110,3 +199,15 @@ d)
       ;;
   esac
 done
+
+if [ $# -eq 0 ]; then
+  echo -e "\nUsage: \n"
+  echo -e "mailcheck ${colgrn}[OPTION]${reset} ${colred}[Domain]\[User]${reset}\n"
+  echo -e "-a \t Check SMTP connections for domain."
+  echo -e "-b \t Checks Unique Dovecot login users"
+  echo -e "-c \t Checks users using both imap and pop3 or only 1 of them."
+  echo -e "-d \t Checks the size of all mailboxes for the domain as an argument"
+  echo -e "-r \t Checks all unique IDs and mail addresses for a mailbox."
+  echo -e "-p \t Checks all SMTP connections for a domain - destination email address optional."
+  echo -e "-s \t Checks the top 5 CWDs for invoked sendmail on the server. Possible SPAM"
+fi
